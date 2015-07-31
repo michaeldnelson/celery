@@ -395,7 +395,7 @@ class chain(Signature):
         else:
             tasks, results = self.prepare_steps(
                 args, self.tasks, root_id, link_error, app,
-                task_id, group_id, chord,
+                task_id, group_id, chord, kwargs=kwargs
             )
 
         if results:
@@ -415,8 +415,10 @@ class chain(Signature):
     def prepare_steps(self, args, tasks,
                       root_id=None, link_error=None, app=None,
                       last_task_id=None, group_id=None, chord_body=None,
-                      clone=True, from_dict=Signature.from_dict):
+                      clone=True, from_dict=Signature.from_dict, kwargs=None):
         app = app or self.app
+        #  Avoid mutable default argument gotcha
+        kwargs = kwargs or {}
         steps = deque(tasks)
         next_step = prev_task = prev_res = None
         tasks, results = [], []
@@ -431,9 +433,10 @@ class chain(Signature):
 
             # first task gets partial args from chain
             if clone:
-                task = task.clone(args) if not i else task.clone()
+                task = task.clone(args, kwargs) if not i else task.clone()
             elif not i:
                 task.args = tuple(args) + tuple(task.args)
+                task.kwargs = dict(task.kwargs, **kwargs)
 
             if isinstance(task, chain):
                 # splice the chain
@@ -486,11 +489,11 @@ class chain(Signature):
         return tasks, results
 
     def apply(self, args=(), kwargs={}, **options):
-        last, fargs = None, args
+        last, fargs, fkwargs = None, args, kwargs
         for task in self.tasks:
-            res = task.clone(fargs).apply(
+            res = task.clone(fargs, fkwargs).apply(
                 last and (last.get(),), **dict(self.options, **options))
-            res.parent, last, fargs = last, res, None
+            res.parent, last, fargs, fkwargs = last, res, None, None
         return last
 
     @classmethod

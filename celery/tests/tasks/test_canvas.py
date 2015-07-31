@@ -42,6 +42,11 @@ class CanvasCase(AppCase):
             return x / y
         self.div = div
 
+        @self.app.task(shared=False)
+        def div_named(dividend=None, divisor=None):
+            return dividend / divisor
+        self.div_named = div_named
+
 
 class test_Signature(CanvasCase):
 
@@ -255,6 +260,22 @@ class test_chain(CanvasCase):
         self.assertTrue(x.tasks[0].type, self.add)
         self.assertTrue(x.type)
 
+    def test_apply_with_kwargs(self):
+        x = chain(self.div_named.s(), self.add.s(4))
+        res = x.apply((), {"dividend": 10, "divisor": 5})
+        self.assertEqual(res.get(), 6)
+
+    def test_kwargs_are_passed_to_run(self):
+        x = chain(self.div_named.s(), self.add.s(4))
+        x.run = Mock()
+        x.delay(dividend=10, divisor=5)
+        x.run.assert_called_with((), {"dividend": 10, "divisor": 5}, app=self.app)
+
+    def test_kwargs_are_passed_to_prepare_steps(self):
+        x = chain(self.div_named.s(), self.add.s(4))
+        x.prepare_steps = Mock(return_value=(None, None))
+        x.delay(dividend=10, divisor=5)
+        self.assertEqual(x.prepare_steps.call_args_list[0][1]['kwargs'], {"dividend": 10, "divisor": 5})
 
 class test_group(CanvasCase):
 
